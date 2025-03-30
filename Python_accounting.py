@@ -40,10 +40,36 @@ if trial_balance_file:
     xls = pd.ExcelFile(trial_balance_file)
     sheet_name = st.selectbox("Select sheet to load Trial Balance from:", xls.sheet_names)
     df_raw = pd.read_excel(xls, sheet_name=sheet_name, skiprows=5)
-    df_raw = df_raw.rename(columns={"c": "Account", "Total": "Amount"})
+
+    # Identify column for Account
+    account_col = None
+    for col in df_raw.columns:
+        if "head" in str(col).lower() or "account" in str(col).lower():
+            account_col = col
+            break
+    if not account_col:
+        account_col = df_raw.columns[0]  # fallback to first column
+
+    df_raw = df_raw.rename(columns={account_col: "Account"})
+    if "Total" in df_raw.columns:
+        df_raw = df_raw.rename(columns={"Total": "Amount"})
+
+    # Drop total lines
+    df_raw = df_raw[~df_raw["Account"].astype(str).str.startswith("Total -")].copy()
 
     # Extract code and name
     df_raw[["Code", "Account Name"]] = df_raw["Account"].apply(lambda x: pd.Series(extract_code_and_name(x)))
+
+    # Assign parent head using hierarchy
+    parent = None
+    parent_heads = []
+    for _, row in df_raw.iterrows():
+        if pd.notna(row["Code"]) and str(row["Account Name"]).strip() != "":
+            parent = row["Account Name"] if row["Code"] % 1000 == 0 else parent
+        parent_heads.append(parent)
+
+    df_raw["Parent Head"] = parent_heads
+
     df_tb = df_raw.dropna(subset=["Code"]).copy()
     df_tb["Code"] = df_tb["Code"].astype(int)
     df_tb["Amount"] = pd.to_numeric(df_tb["Amount"], errors="coerce").fillna(0)
@@ -73,10 +99,10 @@ if trial_balance_file:
     df_bs = df_tb[df_tb["Category"].isin(bs_cats)].copy()
 
     st.subheader("Profit and Loss")
-    st.dataframe(df_pnl[["Account Name", "Amount", "Category"]], use_container_width=True)
+    st.dataframe(df_pnl[["Parent Head", "Account Name", "Amount", "Category"]], use_container_width=True)
 
     st.subheader("Balance Sheet")
-    st.dataframe(df_bs[["Account Name", "Amount", "Category"]], use_container_width=True)
+    st.dataframe(df_bs[["Parent Head", "Account Name", "Amount", "Category"]], use_container_width=True)
 
     # Export to Excel
     output = BytesIO()
