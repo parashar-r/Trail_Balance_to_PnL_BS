@@ -36,8 +36,10 @@ def get_default_ranges():
     ])
 
 if trial_balance_file:
-    # Load trial balance, skip title rows
-    df_raw = pd.read_excel(trial_balance_file, sheet_name="Input", skiprows=5)
+    # Load workbook and allow user to select sheet
+    xls = pd.ExcelFile(trial_balance_file)
+    sheet_name = st.selectbox("Select sheet to load Trial Balance from:", xls.sheet_names)
+    df_raw = pd.read_excel(xls, sheet_name=sheet_name, skiprows=5)
     df_raw = df_raw.rename(columns={"c": "Account", "Total": "Amount"})
 
     # Extract code and name
